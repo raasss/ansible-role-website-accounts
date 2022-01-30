@@ -1,0 +1,124 @@
+---
+- name: Configure common group for website webmaster and application
+  ansible.builtin.group:
+    gid: "{{ website_accounts_group_min_id + item.id }}"
+    name: "{{ item.name }}"
+    state: present
+  with_items:
+    - "{{ website_accounts }}"
+
+#######################################
+
+- name: Configure website webmaster user
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    append: no
+    comment: "{{ item.comment | default(omit) }}"
+    create_home: no
+    group: "{{ item.name }}"
+    groups: "{{ website_accounts_common_groups }}"
+    home: "{{ item.home }}"
+    password: "{{ item.password | password_hash('sha512') | default(omit) }}"
+    shell: "/usr/bin/bash"
+    state: "{{ item.state | default('present') }}"
+    uid: "{{ website_accounts_user_min_id + item.id }}"
+    update_password: "{{ item.update_password | default('on_create') }}"
+  loop: "{{ website_accounts }}"
+
+- name: Configure website webmaster user SSH authorized keys
+  ansible.posix.authorized_key:
+    key: "{{ item.ssh_pub_key }}"
+    user: "{{ item.name }}"
+    path: "{{ website_accounts_authorized_file_basedir }}/{{ item.name }}"
+    manage_dir: no
+  when: item.ssh_pub_key is defined
+  loop: "{{ website_accounts }}"
+
+#######################################
+
+- name: Configure website application user
+  ansible.builtin.user:
+    name: "app-{{ item.name }}"
+    append: no
+    comment: "{{ item.comment | default(omit) }}"
+    create_home: no
+    group: "{{ item.name }}"
+    home: "{{ item.home }}"
+    shell: "/usr/sbin/nologin"
+    state: "{{ item.state | default('present') }}"
+    uid: "{{ website_accounts_app_min_id + item.id }}"
+    update_password: "{{ item.update_password | default('on_create') }}"
+  loop: "{{ website_accounts }}"
+
+#######################################
+
+- name: Create website user home directory
+  file:
+    path: "{{ item.home }}"
+    state: directory
+    mode: 0550
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+  loop: "{{ website_accounts }}"
+
+- name: Create website webroot directory
+  file:
+    path: "{{ item.home }}/htdocs"
+    state: directory
+    mode: 0755
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+  loop: "{{ website_accounts }}"
+
+# Ansible can not work without access to .ansible directory
+- name: Configure website user .ansible directory
+  file:
+    path: "{{ item.home }}/.ansible"
+    state: directory
+    mode: 0750
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+  loop: "{{ website_accounts }}"
+
+- name: Allow access for Apache user on pool home directories
+  acl:
+    path: "{{ item.home }}"
+    entity: "{{ website_accounts_apache_user }}"
+    etype: user
+    permissions: rx
+    state: present
+  loop: "{{ website_accounts }}"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+#######################################
+
+- name: Create website user shared home directory
+  file:
+    path: "{{ item.shared_home }}"
+    state: directory
+    mode: 0550
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+  when: item.shared_home is defined
+  loop: "{{ website_accounts }}"
+
+- name: Create website shared webroot directory
+  file:
+    path: "{{ item.shared_home }}/htdocs"
+    state: directory
+    mode: 0755
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+  when: item.shared_home is defined
+  loop: "{{ website_accounts }}"
+
+- name: Allow access for Apache user on pool shared home directories
+  acl:
+    path: "{{ item.shared_home }}"
+    entity: "{{ website_accounts_apache_user }}"
+    etype: user
+    permissions: rx
+    state: present
+  when: item.shared_home is defined
+  loop: "{{ website_accounts }}"
+  ignore_errors: "{{ ansible_check_mode }}"

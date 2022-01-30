@@ -1,0 +1,9 @@
+---
+website_accounts: []
+website_accounts_user_min_id: 1000000
+website_accounts_group_min_id: 1000000
+website_accounts_app_min_id: 2000000
+website_accounts_common_groups:
+  - webmasters
+website_accounts_authorized_file_basedir: "/etc/ssh/authorized_keys"
+website_accounts_apache_user: "www-data"
